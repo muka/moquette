@@ -52,6 +52,8 @@ import org.eclipse.moquette.spi.impl.security.IAuthenticator;
 import org.eclipse.moquette.server.ServerChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Future;
 
 /**
  * Class responsible to handle the logic of MQTT protocol it's the director of
@@ -95,7 +97,7 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
     }
     
     private static final Logger LOG = LoggerFactory.getLogger(ProtocolProcessor.class);
-    
+    public static final ExecutorService pool = Executors.newCachedThreadPool();
     private Map<String, ConnectionDescriptor> m_clientIDs = new HashMap<>();
     private SubscriptionsStore subscriptions;
     private boolean allowAnonymous;
@@ -146,7 +148,7 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
     }
     
     @MQTTMessage(message = ConnectMessage.class)
-    void processConnect(ServerChannel session, ConnectMessage msg) {
+    void processConnect(final ServerChannel session, final ConnectMessage msg) {
         LOG.debug("CONNECT for client <{}>", msg.getClientID());
         if (msg.getProcotolVersion() != VERSION_3_1 && msg.getProcotolVersion() != VERSION_3_1_1) {
             ConnAckMessage badProto = new ConnAckMessage();
@@ -173,16 +175,32 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
                 failedCredentials(session);
                 return;
             }
-            if (!m_authenticator.checkValid(msg.getUsername(), pwd)) {
-                failedCredentials(session);
-                return;
-            }
-            session.setAttribute(NettyChannel.ATTR_KEY_USERNAME, msg.getUsername());
+
+            final String fpwd = pwd;
+            Future<String> op = pool.submit(new Callable<String>() {
+                @Override
+                public String call() throws Exception {
+                    
+                    if (!m_authenticator.checkValid(msg.getUsername(), fpwd)) {
+                        failedCredentials(session);
+                    }
+                    else {
+                        successCredentials(session, msg);
+                    }
+                    return "";
+                }
+            });            
+            
         } else if (!this.allowAnonymous) {
             failedCredentials(session);
             return;
         }
+    }
 
+    private void successCredentials(ServerChannel session, ConnectMessage msg) {
+        
+        session.setAttribute(NettyChannel.ATTR_KEY_USERNAME, msg.getUsername());
+        
         //if an old client with the same ID already exists close its session.
         if (m_clientIDs.containsKey(msg.getClientID())) {
             LOG.info("Found an existing connection with same client ID <{}>, forcing to close", msg.getClientID());
@@ -291,17 +309,26 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
     }
     
     @MQTTMessage(message = PublishMessage.class)
-    void processPublish(ServerChannel session, PublishMessage msg) {
+    void processPublish(ServerChannel session, final PublishMessage msg) {
         LOG.trace("PUB --PUBLISH--> SRV executePublish invoked with {}", msg);
-        String clientID = (String) session.getAttribute(NettyChannel.ATTR_KEY_CLIENTID);
+        final String clientID = (String) session.getAttribute(NettyChannel.ATTR_KEY_CLIENTID);
         final String topic = msg.getTopicName();
         //check if the topic can be wrote
-        String user = (String) session.getAttribute(NettyChannel.ATTR_KEY_USERNAME);
-        if (m_authorizator.canWrite(topic, user, clientID)) {
-            executePublish(clientID, msg);
-        } else {
-            LOG.debug("topic {} doesn't have write credentials", topic);
-        }
+        final String user = (String) session.getAttribute(NettyChannel.ATTR_KEY_USERNAME);
+        Future<String> op = pool.submit(new Callable<String>() {
+            @Override
+            public String call() throws Exception {
+
+                if (m_authorizator.canWrite(topic, user, clientID)) {
+                    executePublish(clientID, msg);
+                } else {
+                    LOG.debug("topic {} doesn't have write credentials", topic);
+                }
+
+                return "";
+            }
+        });
+        
     }
         
     private void executePublish(String clientID, PublishMessage msg) {
@@ -410,9 +437,9 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
         }
     }
 
-    protected void sendPublish(String clientId, String topic, AbstractMessage.QOSType qos, ByteBuffer message, boolean retained, Integer messageID) {
+    protected void sendPublish(final String clientId, final String topic, AbstractMessage.QOSType qos, ByteBuffer message, boolean retained, Integer messageID) {
         LOG.debug("sendPublish invoked clientId <{}> on topic <{}> QoS {} retained {} messageID {}", clientId, topic, qos, retained, messageID);
-        PublishMessage pubMessage = new PublishMessage();
+        final PublishMessage pubMessage = new PublishMessage();
         pubMessage.setRetainFlag(retained);
         pubMessage.setTopicName(topic);
         pubMessage.setQos(qos);
@@ -438,16 +465,25 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
         if (m_clientIDs.get(clientId) == null) {
             throw new RuntimeException(String.format("Can't find a ConnectionDescriptor for client <%s> in cache <%s>", clientId, m_clientIDs));
         }
-        ServerChannel session = m_clientIDs.get(clientId).getSession();
+        final ServerChannel session = m_clientIDs.get(clientId).getSession();
         LOG.debug("Session for clientId {} is {}", clientId, session);
 
         String user = (String) session.getAttribute(NettyChannel.ATTR_KEY_USERNAME);
-        if (!m_authorizator.canRead(topic, user, clientId)) {
-            LOG.debug("topic {} doesn't have read credentials", topic);
-            return;
-        }
-
-        disruptorPublish(new OutputMessagingEvent(session, pubMessage));
+        Future<String> op = pool.submit(new Callable<String>() {
+            @Override
+            public String call() throws Exception {
+                
+                String user = (String) session.getAttribute(NettyChannel.ATTR_KEY_USERNAME);
+                if (!m_authorizator.canRead(topic, user, clientId)) {
+                    LOG.debug("topic {} doesn't have read credentials", topic);
+                    return "";
+                }
+                
+                disruptorPublish(new OutputMessagingEvent(session, pubMessage));
+                
+                return "";
+            }
+        });
     }
     
     private void sendPubRec(String clientID, int messageID) {
