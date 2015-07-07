@@ -26,7 +26,6 @@ import java.text.ParseException;
 import java.util.Properties;
 
 import static org.eclipse.moquette.commons.Constants.PERSISTENT_STORE_PROPERTY_NAME;
-import static org.eclipse.moquette.commons.Constants.MESSAGING_CLASS_NAME;
 /**
  * Launch a  configured version of the server.
  * @author andrea
