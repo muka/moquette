@@ -52,8 +52,8 @@ import org.eclipse.moquette.spi.impl.security.IAuthenticator;
 import org.eclipse.moquette.server.ServerChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.util.concurrent.Callable;
-import java.util.concurrent.Future;
+
+import org.eclipse.moquette.spi.impl.security.AuthorizatorArgument;
 
 /**
  * Class responsible to handle the logic of MQTT protocol it's the director of
@@ -97,7 +97,6 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
     }
     
     private static final Logger LOG = LoggerFactory.getLogger(ProtocolProcessor.class);
-    public static final ExecutorService pool = Executors.newCachedThreadPool();
     private Map<String, ConnectionDescriptor> m_clientIDs = new HashMap<>();
     private SubscriptionsStore subscriptions;
     private boolean allowAnonymous;
@@ -148,7 +147,7 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
     }
     
     @MQTTMessage(message = ConnectMessage.class)
-    void processConnect(final ServerChannel session, final ConnectMessage msg) {
+    void processConnect(ServerChannel session, ConnectMessage msg) {
         LOG.debug("CONNECT for client <{}>", msg.getClientID());
         if (msg.getProcotolVersion() != VERSION_3_1 && msg.getProcotolVersion() != VERSION_3_1_1) {
             ConnAckMessage badProto = new ConnAckMessage();
@@ -176,20 +175,12 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
                 return;
             }
 
-            final String fpwd = pwd;
-            Future<String> op = pool.submit(new Callable<String>() {
-                @Override
-                public String call() throws Exception {
-                    
-                    if (!m_authenticator.checkValid(msg.getUsername(), fpwd)) {
-                        failedCredentials(session);
-                    }
-                    else {
-                        successCredentials(session, msg);
-                    }
-                    return "";
-                }
-            });            
+            if (!m_authenticator.checkValid(msg.getUsername(), pwd)) {
+                failedCredentials(session);
+            }
+            else {
+                successCredentials(session, msg);
+            }
             
         } else if (!this.allowAnonymous) {
             failedCredentials(session);
@@ -309,26 +300,16 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
     }
     
     @MQTTMessage(message = PublishMessage.class)
-    void processPublish(ServerChannel session, final PublishMessage msg) {
+    void processPublish(final ServerChannel session, final PublishMessage msg) {
         LOG.trace("PUB --PUBLISH--> SRV executePublish invoked with {}", msg);
-        final String clientID = (String) session.getAttribute(NettyChannel.ATTR_KEY_CLIENTID);
-        final String topic = msg.getTopicName();
-        //check if the topic can be wrote
-        final String user = (String) session.getAttribute(NettyChannel.ATTR_KEY_USERNAME);
-        Future<String> op = pool.submit(new Callable<String>() {
-            @Override
-            public String call() throws Exception {
-
-                if (m_authorizator.canWrite(topic, user, clientID)) {
-                    executePublish(clientID, msg);
-                } else {
-                    LOG.debug("topic {} doesn't have write credentials", topic);
-                }
-
-                return "";
-            }
-        });
         
+        AuthorizatorArgument authArg = new AuthorizatorArgument(session, msg);
+        
+        if (m_authorizator.canWrite(authArg)) {
+            executePublish(authArg.getClientID(), authArg.getMsg());
+        } else {
+            LOG.debug("topic {} doesn't have write credentials", authArg.getTopic());
+        }
     }
         
     private void executePublish(String clientID, PublishMessage msg) {
@@ -437,8 +418,10 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
         }
     }
 
-    protected void sendPublish(final String clientId, final String topic, AbstractMessage.QOSType qos, ByteBuffer message, boolean retained, Integer messageID) {
+    protected void sendPublish(String clientId, String topic, AbstractMessage.QOSType qos, ByteBuffer message, boolean retained, Integer messageID) {
+        
         LOG.debug("sendPublish invoked clientId <{}> on topic <{}> QoS {} retained {} messageID {}", clientId, topic, qos, retained, messageID);
+        
         final PublishMessage pubMessage = new PublishMessage();
         pubMessage.setRetainFlag(retained);
         pubMessage.setTopicName(topic);
@@ -469,21 +452,15 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
         LOG.debug("Session for clientId {} is {}", clientId, session);
 
         String user = (String) session.getAttribute(NettyChannel.ATTR_KEY_USERNAME);
-        Future<String> op = pool.submit(new Callable<String>() {
-            @Override
-            public String call() throws Exception {
-                
-                String user = (String) session.getAttribute(NettyChannel.ATTR_KEY_USERNAME);
-                if (!m_authorizator.canRead(topic, user, clientId)) {
-                    LOG.debug("topic {} doesn't have read credentials", topic);
-                    return "";
-                }
-                
-                disruptorPublish(new OutputMessagingEvent(session, pubMessage));
-                
-                return "";
-            }
-        });
+        
+        AuthorizatorArgument authArg = new AuthorizatorArgument(session, pubMessage);
+        
+        if (!m_authorizator.canRead(authArg)) {
+            LOG.debug("topic {} doesn't have read credentials", authArg.getTopic());
+            return;
+        }
+
+        disruptorPublish(new OutputMessagingEvent(session, pubMessage));
     }
     
     private void sendPubRec(String clientID, int messageID) {

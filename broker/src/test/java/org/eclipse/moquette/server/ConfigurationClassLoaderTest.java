@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 import static org.eclipse.moquette.commons.Constants.PERSISTENT_STORE_PROPERTY_NAME;
 import static org.eclipse.moquette.commons.Constants.AUTHENTICATOR_CLASS_NAME;
 import static org.eclipse.moquette.commons.Constants.AUTHORIZATOR_CLASS_NAME;
+import org.eclipse.moquette.spi.impl.security.AuthorizatorArgument;
 import org.eclipse.moquette.spi.impl.security.IAuthenticator;
 import org.eclipse.moquette.spi.impl.security.IAuthorizator;
 
@@ -88,12 +89,12 @@ public class ConfigurationClassLoaderTest implements IAuthenticator, IAuthorizat
     }
 
     @Override
-    public boolean canWrite(String topic, String user, String client) {
+    public boolean canWrite(AuthorizatorArgument arg) {
         return true;
     }
 
     @Override
-    public boolean canRead(String topic, String user, String client) {
+    public boolean canRead(AuthorizatorArgument arg) {
         return true;
     }
     

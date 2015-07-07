@@ -26,6 +26,7 @@ import java.text.ParseException;
 import java.util.Properties;
 
 import static org.eclipse.moquette.commons.Constants.PERSISTENT_STORE_PROPERTY_NAME;
+import static org.eclipse.moquette.commons.Constants.MESSAGING_CLASS_NAME;
 /**
  * Launch a  configured version of the server.
  * @author andrea
@@ -87,8 +88,10 @@ public class Server {
      */
     public void startServer(Properties configProps) throws IOException {
     	ConfigurationParser confParser = new ConfigurationParser(configProps);
-    	m_properties = confParser.getProperties();
+    	
+        m_properties = confParser.getProperties();
         LOG.info("Persistent store file: " + m_properties.get(PERSISTENT_STORE_PROPERTY_NAME));
+        
         messaging = SimpleMessaging.getInstance();
         messaging.init(m_properties);
         

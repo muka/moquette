@@ -20,12 +20,12 @@ package org.eclipse.moquette.spi.impl.security;
  */
 public class DenyAllAuthorizator implements IAuthorizator {
     @Override
-    public boolean canWrite(String topic, String user, String client) {
-        return true;
+    public boolean canWrite(AuthorizatorArgument arg) {
+        return false;
     }
 
     @Override
-    public boolean canRead(String topic, String user, String client) {
-        return true;
+    public boolean canRead(AuthorizatorArgument arg) {
+        return false;
     }
 }

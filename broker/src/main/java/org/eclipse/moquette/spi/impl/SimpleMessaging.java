@@ -39,9 +39,11 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.text.ParseException;
 import java.util.Properties;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.eclipse.moquette.commons.Constants;
 
@@ -63,6 +65,8 @@ import static org.eclipse.moquette.commons.Constants.ACL_FILE_PROPERTY_NAME;
 public class SimpleMessaging implements IMessaging, EventHandler<ValueEvent> {
 
     private static final Logger LOG = LoggerFactory.getLogger(SimpleMessaging.class);
+    
+    public static final ExecutorService pool = Executors.newCachedThreadPool();
     
     private SubscriptionsStore subscriptions;
     
@@ -167,18 +171,26 @@ public class SimpleMessaging implements IMessaging, EventHandler<ValueEvent> {
         }
         
         if (evt instanceof ProtocolEvent) {
-            ServerChannel session = ((ProtocolEvent) evt).getSession();
-            AbstractMessage message = ((ProtocolEvent) evt).getMessage();
-            try {
-                long startTime = System.nanoTime();
-                annotationSupport.dispatch(session, message);
-                if (benchmarkEnabled) {
-                    long delay = System.nanoTime() - startTime;
-                    histogram.recordValue(delay);
+            
+            final ServerChannel session = ((ProtocolEvent) evt).getSession();
+            final AbstractMessage message = ((ProtocolEvent) evt).getMessage();
+            final long startTime = System.nanoTime();
+
+            Future<Object> op = pool.submit(new Callable<Object>() {
+                @Override
+                public String call() throws Exception {
+                    try {
+                        annotationSupport.dispatch(session, message);
+                        if (benchmarkEnabled) {
+                            long delay = System.nanoTime() - startTime;
+                            histogram.recordValue(delay);
+                        }                        
+                    } catch (Throwable th) {
+                        LOG.error("Serious error processing the message {} for {}", message, session, th);
+                    }                        
+                    return null;
                 }
-            } catch (Throwable th) {
-                LOG.error("Serious error processing the message {} for {}", message, session, th);
-            }
+            });
         }
     }
 
@@ -214,8 +226,7 @@ public class SimpleMessaging implements IMessaging, EventHandler<ValueEvent> {
                 authenticator = new FileAuthenticator(configPath, passwdPath);
             }
         }
-        
-        
+                
         IAuthorizator authorizator = null;
 
         String authorizatorClassName = props.getProperty(Constants.AUTHORIZATOR_CLASS_NAME, "");
@@ -304,4 +315,5 @@ public class SimpleMessaging implements IMessaging, EventHandler<ValueEvent> {
             histogram.outputPercentileDistribution(System.out, 1000.0);
         }
     }
+    
 }

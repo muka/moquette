@@ -112,13 +112,13 @@ class AuthorizationsCollector implements IAuthorizator {
     }
 
     @Override
-    public boolean canWrite(String topic, String user, String client) {
-        return canDoOperation(topic, WRITE, user, client);
+    public boolean canWrite(AuthorizatorArgument arg) {
+        return canDoOperation(arg.getTopic(), WRITE, arg.getUsername(), arg.getClientID());
     }
 
     @Override
-    public boolean canRead(String topic, String user, String client) {
-        return canDoOperation(topic, READ, user, client);
+    public boolean canRead(AuthorizatorArgument arg) {
+        return canDoOperation(arg.getTopic(), READ, arg.getUsername(), arg.getClientID());
     }
 
     private boolean canDoOperation(String topic, Authorization.Permission permission, String username, String client) {

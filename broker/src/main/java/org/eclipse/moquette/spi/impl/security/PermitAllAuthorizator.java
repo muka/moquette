@@ -19,13 +19,15 @@ package org.eclipse.moquette.spi.impl.security;
  * @author andrea
  */
 public class PermitAllAuthorizator implements IAuthorizator {
+
     @Override
-    public boolean canWrite(String topic, String user, String client) {
+    public boolean canWrite(AuthorizatorArgument authArg) {
         return true;
     }
 
     @Override
-    public boolean canRead(String topic, String user, String client) {
+    public boolean canRead(AuthorizatorArgument authArg) {
         return true;
     }
+
 }

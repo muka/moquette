@@ -15,6 +15,9 @@
  */
 package org.eclipse.moquette.spi.impl.security;
 
+import org.eclipse.moquette.proto.messages.PublishMessage;
+import org.eclipse.moquette.server.ServerChannel;
+
 /**
  * ACL checker.
  *
@@ -28,8 +31,8 @@ public interface IAuthorizator {
 
     /**
      * Ask the implementation of the authorizator if the topic can be used in a publish.
-     * */
-    boolean canWrite(String topic, String user, String client);
+     */
+    boolean canWrite(AuthorizatorArgument authArg);
 
-    boolean canRead(String topic, String user, String client);
+    boolean canRead(AuthorizatorArgument authArg);
 }

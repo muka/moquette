@@ -20,6 +20,7 @@ import org.junit.Test;
 import java.io.Reader;
 import java.io.StringReader;
 import java.text.ParseException;
+import static org.eclipse.moquette.spi.impl.security.AuthorizationsCollectorTest.createAuthorizatorArg;
 
 import static org.junit.Assert.*;
 
@@ -58,8 +59,8 @@ public class ACLFileParserTest {
         AuthorizationsCollector authorizations = ACLFileParser.parse(conf);
 
         //Verify
-        assertTrue(authorizations.canRead("/weather/italy/anemometer", "", ""));
-        assertTrue(authorizations.canWrite("/weather/italy/anemometer", "", ""));
+        assertTrue(authorizations.canRead(createAuthorizatorArg("/weather/italy/anemometer", "", "")));
+        assertTrue(authorizations.canWrite(createAuthorizatorArg("/weather/italy/anemometer", "", "")));
     }
 
 }
