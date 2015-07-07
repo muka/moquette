@@ -33,21 +33,21 @@ import static org.eclipse.moquette.commons.Constants.*;
  * 
  * @author andrea
  */
-class ConfigurationParser {
+public class ConfigurationParser {
     
     private static final Logger LOG = LoggerFactory.getLogger(ConfigurationParser.class);
     
     private Properties m_properties = new Properties();
     
-    ConfigurationParser() {
+    public ConfigurationParser() {
     	createDefaults();
     }
 
     /**
      * Crate a ConfigurationParser merging the default properties with the provided ones.
      * */
-    ConfigurationParser(Properties properties) {
-    	this();
+    public ConfigurationParser(Properties properties) {
+        this();
     	for (Entry<Object, Object> entrySet : properties.entrySet()) {
                 m_properties.put(entrySet.getKey(), entrySet.getValue());
     	}
@@ -129,7 +129,7 @@ class ConfigurationParser {
         }
     }
     
-    Properties getProperties() {
+    public Properties getProperties() {
         return m_properties;
     }
 }

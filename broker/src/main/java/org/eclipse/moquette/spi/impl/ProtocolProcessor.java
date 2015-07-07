@@ -63,7 +63,42 @@ import org.eclipse.moquette.spi.impl.security.AuthorizatorArgument;
  * 
  * @author andrea
  */
-class ProtocolProcessor implements EventHandler<ValueEvent> {
+class ProtocolProcessor implements EventHandler<ValueEvent>, IMessagingListener {
+
+    @Override
+    public void onConnect(ServerChannel session, ConnectMessage msg) {
+        if(m_dispatcher != null) {
+            m_dispatcher.onConnect(session, msg);
+        }
+    }
+
+    @Override
+    public void onDisconnect(ServerChannel session, DisconnectMessage msg) {
+        if(m_dispatcher != null) {
+            m_dispatcher.onDisconnect(session, msg);
+        }
+    }
+
+    @Override
+    public void onPublish(ServerChannel session, PublishMessage msg) {
+        if(m_dispatcher != null) {
+            m_dispatcher.onPublish(session, msg);
+        }        
+    }
+
+    @Override
+    public void onSubscribe(ServerChannel session, SubscribeMessage msg) {
+        if(m_dispatcher != null) {
+            m_dispatcher.onSubscribe(session, msg);
+        }        
+    }
+
+    @Override
+    public void onUnsubscribe(ServerChannel session, UnsubscribeMessage msg) {
+        if(m_dispatcher != null) {
+            m_dispatcher.onUnsubscribe(session, msg);
+        }
+    }
     
     static final class WillMessage {
         private final String topic;
@@ -97,13 +132,17 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
     }
     
     private static final Logger LOG = LoggerFactory.getLogger(ProtocolProcessor.class);
-    private Map<String, ConnectionDescriptor> m_clientIDs = new HashMap<>();
+    final private Map<String, ConnectionDescriptor> m_clientIDs = new HashMap<>();
     private SubscriptionsStore subscriptions;
     private boolean allowAnonymous;
     private IAuthorizator m_authorizator;
     private IMessagesStore m_messagesStore;
+    
     private ISessionsStore m_sessionsStore;
     private IAuthenticator m_authenticator;
+    
+    private IMessagingListener m_dispatcher;
+    
     //maps clientID to Will testament, if specified on CONNECT
     private Map<String, WillMessage> m_willStore = new HashMap<>();
     
@@ -125,19 +164,20 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
     void init(SubscriptionsStore subscriptions, IMessagesStore storageService,
               ISessionsStore sessionsStore,
               IAuthenticator authenticator,
-              boolean allowAnonymous, IAuthorizator authorizator) {
+              boolean allowAnonymous, IAuthorizator authorizator, IMessagingListener dispatcher) {
         //m_clientIDs = clientIDs;
         this.subscriptions = subscriptions;
         this.allowAnonymous = allowAnonymous;
         m_authorizator = authorizator;
         LOG.debug("subscription tree on init {}", subscriptions.dumpTree());
         m_authenticator = authenticator;
+        m_dispatcher = dispatcher;        
         m_messagesStore = storageService;
         m_sessionsStore = sessionsStore;
         
         //init the output ringbuffer
         m_executor = Executors.newFixedThreadPool(1);
-
+        
         Disruptor<ValueEvent> disruptor = new Disruptor<>(ValueEvent.EVENT_FACTORY, 1024 * 32, m_executor);
         disruptor.handleEventsWith(this);
         disruptor.start();
@@ -253,6 +293,8 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
             //force the republish of stored QoS1 and QoS2
             republishStoredInSession(msg.getClientID());
         }
+        
+        onConnect(session, msg);        
     }
 
     private void failedCredentials(ServerChannel session) {
@@ -300,13 +342,16 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
     }
     
     @MQTTMessage(message = PublishMessage.class)
-    void processPublish(final ServerChannel session, final PublishMessage msg) {
+    void processPublish(ServerChannel session, PublishMessage msg) {
         LOG.trace("PUB --PUBLISH--> SRV executePublish invoked with {}", msg);
         
         AuthorizatorArgument authArg = new AuthorizatorArgument(session, msg);
         
         if (m_authorizator.canWrite(authArg)) {
+            
             executePublish(authArg.getClientID(), authArg.getMsg());
+            onPublish(authArg.getSession(), authArg.getMsg());
+                    
         } else {
             LOG.debug("topic {} doesn't have write credentials", authArg.getTopic());
         }
@@ -422,7 +467,7 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
         
         LOG.debug("sendPublish invoked clientId <{}> on topic <{}> QoS {} retained {} messageID {}", clientId, topic, qos, retained, messageID);
         
-        final PublishMessage pubMessage = new PublishMessage();
+        PublishMessage pubMessage = new PublishMessage();
         pubMessage.setRetainFlag(retained);
         pubMessage.setTopicName(topic);
         pubMessage.setQos(qos);
@@ -451,8 +496,6 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
         final ServerChannel session = m_clientIDs.get(clientId).getSession();
         LOG.debug("Session for clientId {} is {}", clientId, session);
 
-        String user = (String) session.getAttribute(NettyChannel.ATTR_KEY_USERNAME);
-        
         AuthorizatorArgument authArg = new AuthorizatorArgument(session, pubMessage);
         
         if (!m_authorizator.canRead(authArg)) {
@@ -569,6 +612,7 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
         //cleanup the will store
         m_willStore.remove(clientID);
         
+        onDisconnect(session, msg);
         LOG.info("DISCONNECT client <{}> with clean session {}", clientID, cleanSession);
     }
     
@@ -579,6 +623,8 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
 
             //de-activate the subscriptions for this ClientID
             subscriptions.deactivate(clientID);
+
+            onDisconnect(evt.session, null);
             LOG.info("Lost connection with client <{}>", clientID);
         }
         //publish the Will message (if any) for the clientID
@@ -608,7 +654,8 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
         //ack the client
         UnsubAckMessage ackMessage = new UnsubAckMessage();
         ackMessage.setMessageID(messageID);
-
+        
+        onUnsubscribe(session, msg);
         LOG.info("replying with UnsubAck to MSG ID {}", messageID);
         session.write(ackMessage);
     }
@@ -630,6 +677,7 @@ class ProtocolProcessor implements EventHandler<ValueEvent> {
             ackMessage.addType(valid ? qos : AbstractMessage.QOSType.FAILURE);
         }
 
+        onSubscribe(session, msg);
         LOG.debug("SUBACK for packetID {}", msg.getMessageID());
         session.write(ackMessage);
     }

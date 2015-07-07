@@ -34,9 +34,9 @@ public class Server {
     
     private static final Logger LOG = LoggerFactory.getLogger(Server.class);
     
-    private ServerAcceptor m_acceptor;
-    SimpleMessaging messaging;
-    Properties m_properties;
+    protected ServerAcceptor m_acceptor;
+    protected SimpleMessaging messaging;
+    protected Properties m_properties;
     
     public static void main(String[] args) throws IOException {
         final Server server = new Server();

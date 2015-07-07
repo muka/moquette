@@ -127,8 +127,8 @@ public class SimpleMessaging implements IMessaging, EventHandler<ValueEvent> {
     }
     
     @Override
-    public void lostConnection(String clientID) {
-        disruptorPublish(new LostConnectionEvent(clientID));
+    public void lostConnection(ServerChannel channel, String clientID) {
+        disruptorPublish(new LostConnectionEvent(channel, clientID));
     }
 
     @Override
@@ -253,9 +253,17 @@ public class SimpleMessaging implements IMessaging, EventHandler<ValueEvent> {
             }
 
         }
-        
+
+        IMessagingListener dispatcher = null;
+
+        String dispatcherClassName = props.getProperty(Constants.DISPATCHER_CLASS_NAME, "");
+        if(!dispatcherClassName.isEmpty()) {
+                dispatcher = (IMessagingListener) loadClass(dispatcherClassName, IMessagingListener.class);
+                LOG.info("Loaded dispatcher {}", dispatcherClassName);
+        }        
+
         boolean allowAnonymous = Boolean.parseBoolean(props.getProperty(ALLOW_ANONYMOUS_PROPERTY_NAME, "true"));
-        m_processor.init(subscriptions, m_storageService, m_sessionsStore, authenticator, allowAnonymous, authorizator);
+        m_processor.init(subscriptions, m_storageService, m_sessionsStore, authenticator, allowAnonymous, authorizator, dispatcher);
     }
     
     private Object loadClass(String className, Class<?> cls) {

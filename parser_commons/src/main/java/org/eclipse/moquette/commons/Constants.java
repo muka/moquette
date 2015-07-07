@@ -41,5 +41,6 @@ public class Constants {
     public static final String ACL_FILE_PROPERTY_NAME = "acl_file";
     public static final String AUTHORIZATOR_CLASS_NAME = "authorizator_class";
     public static final String AUTHENTICATOR_CLASS_NAME = "authenticator_class";
+    public static final String DISPATCHER_CLASS_NAME = "dispatcher_class";
     
 }
