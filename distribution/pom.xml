@@ -2,16 +2,15 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <relativePath>../</relativePath>
-        <!--<relativePath>../pom.xml</relativePath>-->
         <artifactId>moquette-parent</artifactId>
         <groupId>org.eclipse.moquette</groupId>
-        <version>${moquette.version}</version>
+        <version>0.8-SNAPSHOT</version>
     </parent>
 
     <artifactId>distribution</artifactId>
     <packaging>pom</packaging>
     <name>Moquette - distribution</name>
+    <version>${moquette.version}</version>
 
     <!-- Includes all modules -->
     <dependencies>
